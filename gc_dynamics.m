@@ -50,9 +50,7 @@ alpha  = 1; % The velocity gain from Equation (4)
 % RUN SIMULATION
 %---------------
 if simulate_non_periodic == 0
-    [spikes] = gc_periodic(filename,n,tau,dt,beta,alphabar,abar,wtphase,alpha, useSpiking);
-else
-    [spikes] = gc_non_periodic(filename,n,tau,dt,beta,alphabar,abar,wtphase,alpha, useSpiking);
+    [spikes, position_x, position_y, sNeuronResponse] = gc_periodic_baseline(filename,n,tau,dt,beta,alphabar,abar,wtphase);
 end
 
 %gc_dynamics('', 0, 0, 0)
