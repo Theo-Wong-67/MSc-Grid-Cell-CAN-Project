@@ -1,4 +1,4 @@
-function [spikes, position_x, position_y, sNeuronResponse] = gc_periodic_baseline(filename,n,tau,dt,beta,alphabar,abar,wtphase);
+function [spikes, position_x, position_y, sNeuronResponse, rate_map_smooth] = gc_periodic_baseline(filename,n,tau,dt,beta,alphabar,abar,wtphase);
 %-----------------------------------
 % Grid Cell Dynamics - Periodic Baseline
 % Based on Burak and Fiete (2009)
@@ -95,7 +95,7 @@ s = r;
 spikes = cell(sampling_length, 1);
 spikes(:) = {sparse(n, n)};
 
-sNeuronResponse = zeros(sampling_length, 1);
+sNeuronResponse = zeros(sampling_length,1);
 sNeuron = [n/2, n/2];
 
 x = -n/2:1:n/2-1;

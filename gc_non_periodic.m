@@ -1,4 +1,4 @@
-function [spikes] = gc_non_periodic(filename,n,tau,dt,beta,alphabar,abar,wtphase,alpha,useSpiking)
+function [spikes, position_x, position_y, sNeuronResponse, rate_map_smooth] = gc_non_periodic(filename,n,tau,dt,beta,alphabar,abar,wtphase,alpha,useSpiking) % *** CHANGED: added output arguments position_x, position_y, sNeuronResponse, rate_map_smooth ***
 %-----------------------------------
 % Grid Cell Dynamics - Periodic
 %-----------------------------------
@@ -20,13 +20,15 @@ else
     % turn at each time step and trajectory based off of the previous time
     % step's head direction
 
-    enclosureRadius = 2*100; % Two meters
+    % Arena from circular 200cm radius to square 75x75cm 
+    arena_half = 37.5;
     temp_velocity = rand()/2;
     position_x = zeros(100000,1);
     position_y = zeros(100000,1);
     headDirection = zeros(100000,1)';
-    position_x(1) = 0;
-    position_y(1) = 0;
+    % *** CHANGED: random starting position within square arena ***
+    position_x(1) = (rand()-0.5)*75;
+    position_y(1) = (rand()-0.5)*75;
     headDirection(1) = rand()*2*pi;
     
     for i = 2:100000
@@ -43,14 +45,19 @@ else
             leftOrRight = -1;
         end
         
-        while (sqrt((position_x(i-1) + cos(headDirection(i-1))*temp_velocity)^2 ...
-            + (position_y(i-1) + sin(headDirection(i-1))*temp_velocity)^2)  > enclosureRadius)
-           
+        % Square boundary check 
+        next_x = position_x(i-1) + cos(headDirection(i-1))*temp_velocity;
+        next_y = position_y(i-1) + sin(headDirection(i-1))*temp_velocity;
+        
+        while (abs(next_x) > arena_half || abs(next_y) > arena_half)
             headDirection(i-1) = headDirection(i-1) + leftOrRight*pi/100;
-           
+            next_x = position_x(i-1) + cos(headDirection(i-1))*temp_velocity;
+            next_y = position_y(i-1) + sin(headDirection(i-1))*temp_velocity;
         end
-        position_x(i) = position_x(i-1)+cos(headDirection(i-1))*temp_velocity; 
-        position_y(i) = position_y(i-1)+sin(headDirection(i-1))*temp_velocity; 
+        
+        position_x(i) = next_x;
+        position_y(i) = next_y;
+
         headDirection(i) = mod(headDirection(i-1) + (rand()-.5)/5*pi/2,2*pi);
     end
     
@@ -102,7 +109,8 @@ spikes = cell(sampling_length,1);
 spikes(:) = {sparse(n,n)};
 
 % A placeholder for a single neuron response
-sNeuronResponse = zeros(1,sampling_length);
+% *** CHANGED: column vector to match position_x dimensions ***
+sNeuronResponse = zeros(sampling_length,1);
 sNeuron = [n/2, n/2];
 
 % Envelope and Weight Matrix parameters
@@ -225,7 +233,14 @@ vel=0;
     s = r;
     set(fig,'Position',[50,1000,450,900]);
 
+    wb = waitbar(0, 'Running simulation...'); % Progress bar 
+
     for iter=1: sampling_length  - 20      
+
+        % Progress bar update
+        waitbar(iter/(sampling_length-20), wb, ...
+            sprintf('Step %d / %d (%.1f%%)', iter, sampling_length-20, ...
+            100*iter/(sampling_length-20)));
         
         theta_v =  headDirection(increment);
         vel = sqrt((position_x(increment) - position_x(increment- 1))^2 + (position_y(increment) - position_y(increment- 1))^2);
@@ -294,19 +309,53 @@ vel=0;
         end
         
         if mod(iter,20) == 1
-            tempx = sNeuronResponse.*position_x;
-            tempy = sNeuronResponse.*position_y;
+            tempx = sNeuronResponse(1:increment).*position_x(1:increment);
+            tempy = sNeuronResponse(1:increment).*position_y(1:increment);
             tempx(tempx == 0) = [];
             tempy(tempy == 0) = [];
             subplot(2,1,2)
             plot(position_x(1:increment),position_y(1:increment),'-',position_x(increment),position_y(increment),'o', tempx,tempy,'x')
             title('Single Neuron Response');
-            axis([min(position_x),max(position_x),min(position_y),max(position_y)]);
+            xlabel('x position (cm)');
+            ylabel('y position (cm)');
+
+            axis([-arena_half, arena_half, -arena_half, arena_half]); % fixed axis to square arena bounds
             drawnow;
         end
     end        
 
-    
-  
+    close(wb); % Progress bar
+
+    %----------------------------------------------------------
+    % BINNED FIRING RATE MAP 
+    %----------------------------------------------------------
+    n_bins = 25;
+    bin_edges = linspace(-arena_half, arena_half, n_bins + 1);
+    bin_centres = (bin_edges(1:end-1) + bin_edges(2:end)) / 2;
+
+    spike_map = zeros(n_bins, n_bins);
+    occupancy_map = zeros(n_bins, n_bins);
+
+    for t = 1:length(position_x)
+        xi = find(position_x(t) >= bin_edges(1:end-1) & position_x(t) < bin_edges(2:end), 1);
+        yi = find(position_y(t) >= bin_edges(1:end-1) & position_y(t) < bin_edges(2:end), 1);
+        if ~isempty(xi) && ~isempty(yi)
+            spike_map(yi, xi) = spike_map(yi, xi) + sNeuronResponse(t);
+            occupancy_map(yi, xi) = occupancy_map(yi, xi) + 1;
+        end
+    end
+
+    rate_map = spike_map ./ occupancy_map;
+    rate_map(occupancy_map == 0) = 0;
+    rate_map_smooth = imgaussfilt(rate_map, 1);
+
+    figure;
+    imagesc(bin_centres, bin_centres, rate_map_smooth);
+    colormap(jet); colorbar;
+    title('Firing Rate Map (25\times25 bins)');
+    xlabel('x position (cm)');
+    ylabel('y position (cm)');
+    axis equal tight;
+    set(gca, 'YDir', 'normal');
 
 end
