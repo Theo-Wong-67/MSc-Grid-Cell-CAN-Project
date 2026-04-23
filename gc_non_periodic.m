@@ -1,4 +1,4 @@
-function [spikes, position_x, position_y, sNeuronResponse, rate_map_smooth] = gc_non_periodic(filename,n,tau,dt,beta,alphabar,abar,wtphase,alpha,useSpiking) % *** CHANGED: added output arguments position_x, position_y, sNeuronResponse, rate_map_smooth ***
+function [spikes, position_x, position_y, sNeuronResponse, rate_map_smooth] = gc_non_periodic(filename,n,tau,dt,beta,alphabar,abar,wtphase,alpha,useSpiking) % More output arguments
 %-----------------------------------
 % Grid Cell Dynamics - Periodic
 %-----------------------------------
@@ -26,7 +26,7 @@ else
     position_x = zeros(100000,1);
     position_y = zeros(100000,1);
     headDirection = zeros(100000,1)';
-    % *** CHANGED: random starting position within square arena ***
+    % Random start
     position_x(1) = (rand()-0.5)*75;
     position_y(1) = (rand()-0.5)*75;
     headDirection(1) = rand()*2*pi;
@@ -109,7 +109,6 @@ spikes = cell(sampling_length,1);
 spikes(:) = {sparse(n,n)};
 
 % A placeholder for a single neuron response
-% *** CHANGED: column vector to match position_x dimensions ***
 sNeuronResponse = zeros(sampling_length,1);
 sNeuron = [n/2, n/2];
 
