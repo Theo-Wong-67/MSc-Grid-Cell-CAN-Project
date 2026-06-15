@@ -5,7 +5,7 @@ function [spikes, position_x, position_y, sNeuronResponse, rate_map_smooth] = gc
 % N = 128, rate-coded, no damage
 % Square 75x75 cm arena
 %-----------------------------------
-
+steps = 50000;
 if nargin < 1, filename = ''; end
 if nargin < 2, n = 128; end
 if nargin < 3, tau = 10; end
@@ -25,14 +25,14 @@ if exist(filename, 'file') == 2
 else
     arena_half = 75 / 2;
     temp_velocity = rand() / 2;
-    position_x = zeros(100000, 1);
-    position_y = zeros(100000, 1);
-    headDirection = zeros(100000, 1)';
+    position_x = zeros(steps, 1);
+    position_y = zeros(steps, 1);
+    headDirection = zeros(steps, 1)';
     position_x(1) = (rand() - 0.5) * 75;
     position_y(1) = (rand() - 0.5) * 75;
     headDirection(1) = rand() * 2 * pi;
 
-    for i = 2:100000
+    for i = 2:steps
         temp_rand = max(min(normrnd(0, .05), .2), -.2);
         temp_velocity = min(max(temp_velocity + temp_rand, 0), .25);
 

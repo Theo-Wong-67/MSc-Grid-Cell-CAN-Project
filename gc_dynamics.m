@@ -55,4 +55,4 @@ elseif simulate_non_periodic == 1
     [spikes, position_x, position_y, sNeuronResponse, rate_map_smooth] = gc_non_periodic(filename,n,tau,dt,beta,alphabar,abar,wtphase,alpha,useSpiking);
 end
 fourier_analysis(rate_map_smooth);
-%gc_dynamics('', 0, 0, 1)
+%gc_dynamics('', 0, 0, 0)

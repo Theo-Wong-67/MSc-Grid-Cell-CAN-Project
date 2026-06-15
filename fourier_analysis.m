@@ -1,79 +1,206 @@
-function fourier_analysis(rate_map_smooth)
-% Fourier analysis of a single neuron firing rate map
-% Following Ying et al. (2023) STAR Methods
+function [ratio, n_components, orientations] = fourier_analysis(rate_map, mean_fr, bin_size_m, n_shuffles)
+%FOURIER_ANALYSIS  Fourier grid-quality analysis — Ying et al. (2023).
+%   Implements "Generation of Fourier spectrums" and "Identifying Fourier
+%   components" from Ying et al. (2023) Current Biology 33, 2425-2437,
+%   STAR Methods (following Krupic et al. where cited).
+%
+%   Usage (minimal — matches existing gc_dynamics.m call):
+%       fourier_analysis(rate_map_smooth)
+%
+%   Full usage:
+%       [ratio, n_components, orientations] = ...
+%           fourier_analysis(rate_map, mean_fr, bin_size_m, n_shuffles)
 
-% Zero-pad to 256x256
-rate_map_padded = zeros(256, 256);
-[rows, cols] = size(rate_map_smooth);  % should be 25x25
-row_offset = floor((256 - rows) / 2);
-col_offset = floor((256 - cols) / 2);
-rate_map_padded(row_offset+1:row_offset+rows, col_offset+1:col_offset+cols) = rate_map_smooth;
-
-% 2D Fourier transform
-win = hann(256) * hann(256)';
-rate_map_padded_windowed = rate_map_padded .* win;
-F = fft2(rate_map_padded_windowed);
-F_shifted = fftshift(F);
-power = abs(F_shifted).^2;
-
-% Find dominant components — exclude DC (centre)
-centre = [129, 129];
-[rows_grid, cols_grid] = ndgrid(1:256, 1:256);
-dist_from_centre = sqrt((rows_grid - centre(1)).^2 + (cols_grid - centre(2)).^2);
-
-% Mask DC and near-DC
-min_radius = 10;
-max_radius = 100;
-mask = (dist_from_centre >= min_radius) & (dist_from_centre <= max_radius);
-masked_power = power .* mask;
-
-% Find peaks — take top 6 candidates
-num_peaks = 6;
-[~, idx] = sort(masked_power(:), 'descend');
-peak_indices = idx(1:num_peaks);
-[peak_rows, peak_cols] = ind2sub([256, 256], peak_indices);
-
-% Compute angles of each peak relative to centre
-angles = atan2d(peak_rows - centre(1), peak_cols - centre(2));
-angles = mod(angles, 360);
-
-% Compute pairwise angular offsets between peaks
-n_peaks = length(angles);
-offsets = [];
-for i = 1:n_peaks
-    for j = i+1:n_peaks
-        diff = abs(angles(i) - angles(j));
-        diff = min(diff, 360 - diff);  % wrap to [0, 180]
-        offsets(end+1) = diff;
+    % ------------------------------------------------------------------
+    % Defaults
+    % ------------------------------------------------------------------
+    if nargin < 2 || isempty(mean_fr)
+        pos = rate_map(rate_map > 0);
+        mean_fr = mean(pos(:));
+        if isnan(mean_fr) || mean_fr == 0,  mean_fr = 1;  end
     end
+    if nargin < 3 || isempty(bin_size_m),  bin_size_m = 0.030; end
+    if nargin < 4 || isempty(n_shuffles),  n_shuffles = 100;   end
+
+    [N, M] = size(rate_map);
+    PAD    = 256;
+    CENTRE = [129, 129];
+
+    r_off = floor((PAD - N) / 2);
+    c_off = floor((PAD - M) / 2);
+
+    % ==================================================================
+    % GENERATION OF FOURIER SPECTRUM  (Ying et al. STAR Methods p. e3)
+    %   1. Centre zero-pad to 256x256
+    %   2. fft2  (no windowing)
+    %   3. Amplitude / mean_fr
+    %   4. Element-wise square -> power
+    %   5. fftshift
+    %   6. Gaussian loss (bump=0) centred on strongest pixel -> erase DC
+    % ==================================================================
+    power = compute_power(rate_map, mean_fr, N, M, PAD, r_off, c_off);
+
+    % ==================================================================
+    % IDENTIFYING FOURIER COMPONENTS  (Ying et al. STAR Methods p. e3)
+    % ==================================================================
+
+    % Step 7: 75th-percentile noise baseline from shuffled rate maps
+    shuffle_stack = zeros(PAD, PAD, n_shuffles);
+    for s = 1:n_shuffles
+        rm_s = reshape(rate_map(randperm(numel(rate_map))), N, M);
+        shuffle_stack(:,:,s) = compute_power(rm_s, mean_fr, N, M, PAD, r_off, c_off);
+    end
+    baseline_75 = prctile(shuffle_stack, 75, 3);
+
+    % Step 8: Subtract baseline; set negatives to zero
+    power_clean = power - baseline_75;
+    power_clean(power_clean < 0) = 0;
+
+    % Step 9: Zero values below 25% of remaining maximum
+    pmax = max(power_clean(:));
+    if pmax > 0
+        power_clean(power_clean < 0.25 * pmax) = 0;
+    end
+
+    % Step 10: Binary mask
+    binary_mask = power_clean > 0;
+
+    % ==================================================================
+    % VISUALISATION — placed here so it always runs regardless of whether
+    % component detection succeeds or triggers an early exit below
+    % ==================================================================
+    figure('Position', [50 50 1250 400], 'Name', 'Fourier Analysis — Ying et al. 2023');
+
+    subplot(1,3,1)
+    imagesc(rate_map); colormap(gca, jet); colorbar;
+    title(sprintf('Rate map  (%d\\times%d bins)', N, M));
+    xlabel('x bin'); ylabel('y bin');
+    axis equal tight;
+
+    subplot(1,3,2)
+    imagesc(log(power + 1)); colormap(gca, hot); colorbar;
+    hold on;
+    plot(CENTRE(2), CENTRE(1), 'g+', 'MarkerSize', 12, 'LineWidth', 2);
+    title('Power spectrum (log, DC removed)');
+    xlabel('k_x'); ylabel('k_y');
+    axis equal tight;
+
+    subplot(1,3,3)
+    imagesc(power_clean, [0, max(power_clean(:))]); 
+    colormap(gca, jet); colorbar;
+    title('Fourier spectrum (thresholded)');
+    xlabel('bin'); ylabel('bin');
+    axis equal tight;
+    % ==================================================================
+    % COMPONENT DETECTION  (continues after figure is open)
+    % ==================================================================
+
+    % Step 11: regionprops -> discard area < 10 px
+    props = regionprops(binary_mask, 'Area', 'Centroid');
+    if isempty(props)
+        fprintf('[fourier_analysis] No regions detected after thresholding.\n');
+        ratio = NaN;  n_components = 0;  orientations = [];
+        sgtitle('Fourier Analysis — Ying et al. (2023) | No components');
+        return
+    end
+    props        = props([props.Area] >= 10);
+    n_components = numel(props);
+    fprintf('[fourier_analysis] Components (area >= 10 px): %d\n', n_components);
+
+    % Step 12: Exclude cells with more than 4 components (Krupic et al.)
+    %   NOTE: clean simulated hexagonal cells produce 6 spectral peaks;
+    %   if all survive thresholding, this criterion will always fire.
+    %   Increase SIGMA_DC in compute_power to widen DC removal and reduce
+    %   the number of surviving peaks, or fold antipodal pairs before
+    %   counting (each opposing peak pair = 1 wave vector -> 3 for hex).
+    if n_components > 4
+        fprintf('[fourier_analysis] Cell excluded: >4 Fourier components.\n');
+        ratio = NaN;  orientations = [];
+        sgtitle(sprintf('Fourier Analysis — Ying et al. (2023) | EXCLUDED (n=%d)', n_components));
+        return
+    end
+    if n_components == 0
+        fprintf('[fourier_analysis] No valid components after area filter.\n');
+        ratio = NaN;  orientations = [];
+        sgtitle('Fourier Analysis — Ying et al. (2023) | No components');
+        return
+    end
+
+    % Step 13: Wave vectors from regionprops centroids
+    centroids = reshape([props.Centroid], 2, [])';   % [col, row] per row
+
+    dx = centroids(:,1) - CENTRE(2);
+    dy = centroids(:,2) - CENTRE(1);
+
+    kx  = (2*pi .* dx) ./ (N * bin_size_m);
+    ky  = (2*pi .* dy) ./ (M * bin_size_m);
+
+    phi          = atan2d(ky, kx);
+    theta        = mod(phi + 90, 360);
+    orientations = theta(:)';
+
+    fprintf('[fourier_analysis] phi   (wave vector, deg): '); fprintf('%7.2f ', phi');   fprintf('\n');
+    fprintf('[fourier_analysis] theta (grid axis,   deg): '); fprintf('%7.2f ', theta'); fprintf('\n');
+
+    % Step 14: Fourier ratio
+    offsets = [];
+    for i = 1:n_components
+        for j = i+1:n_components
+            d = abs(phi(i) - phi(j));
+            d = min(d, 360 - d);
+            offsets(end+1) = d; %#ok<AGROW>
+        end
+    end
+
+    hex_count  = sum(abs(offsets - 60) <= 10);
+    quad_count = sum(abs(offsets - 90) <= 10);
+    fprintf('[fourier_analysis] 60-deg pairs: %d   90-deg pairs: %d\n', hex_count, quad_count);
+
+    if quad_count > 0
+        ratio = hex_count / quad_count;
+        fprintf('[fourier_analysis] Fourier ratio (60/90): %.4f\n', ratio);
+    else
+        ratio = Inf;
+        fprintf('[fourier_analysis] Fourier ratio: Inf (no 90-deg pairs)\n');
+    end
+
+    % Update panel 3 with detected centroids and final title
+    subplot(1,3,3)
+    hold on;
+    %plot(centroids(:,1), centroids(:,2), 'r+', 'MarkerSize', 14, 'LineWidth', 2);
+    title(sprintf('Binary mask  |  %d components', n_components));
+
+    sgtitle(sprintf('Fourier Analysis — Ying et al. (2023)  |  ratio = %.3f', ratio));
 end
 
-% Classify offsets: 60deg (+-10) = hexagonal, 90deg (+-10) = quadrant
-hex_count  = sum(abs(offsets - 60) <= 10);
-quad_count = sum(abs(offsets - 90) <= 10);
 
-fprintf('Hexagonal (60 deg) offsets: %d\n', hex_count);
-fprintf('Quadrant  (90 deg) offsets: %d\n', quad_count);
+% ======================================================================
+%  LOCAL FUNCTION — must stay in this file, below the main function
+% ======================================================================
+function pwr = compute_power(rm, mfr, N, M, PAD, r_off, c_off)
+%COMPUTE_POWER  Steps 1-6: zero-pad -> fft2 -> normalise -> power ->
+%               fftshift -> Gaussian DC removal.
+%
+%   SIGMA_DC: "width of 1" from the paper (units unspecified).
+%   Interpreted as sigma = 10 spectrum pixels on a 256x256 grid.
+%   Increase to broaden the DC notch (needed if all 6 hex peaks survive
+%   and n_components consistently exceeds 4).
 
-if quad_count > 0
-    ratio = hex_count / quad_count;
-    fprintf('Fourier ratio (60/90): %.4f\n', ratio);
-else
-    fprintf('Fourier ratio: undefined (no 90 deg components)\n');
-    ratio = Inf;
-end
+    SIGMA_DC = 10;
 
-% Visualise
-figure;
-subplot(1,2,1)
-imagesc(rate_map_smooth); colormap(jet); colorbar;
-title('Firing Rate Map (25x25)');
-axis equal tight;
+    % Steps 1-5
+    padded = zeros(PAD, PAD);
+    padded(r_off+1:r_off+N, c_off+1:c_off+M) = rm;
 
-subplot(1,2,2)
-imagesc(log(power + 1)); colormap(hot); colorbar;
-hold on;
-plot(peak_cols, peak_rows, 'c+', 'MarkerSize', 10, 'LineWidth', 2);
-title('Power Spectrum (log scale)');
-axis equal tight;
+    F   = fftshift(fft2(padded));
+    amp = abs(F) ./ mfr;
+    pwr = amp .^ 2;
+
+    % Step 6: Gaussian loss centred on strongest pixel
+    [~, idx]     = max(pwr(:));
+    [r_pk, c_pk] = ind2sub([PAD, PAD], idx);
+    [rr, cc]     = ndgrid(1:PAD, 1:PAD);
+    gauss_loss   = 1 - exp(-((rr - r_pk).^2 + (cc - c_pk).^2) ...
+                            ./ (2 * SIGMA_DC^2));
+    pwr = pwr .* gauss_loss;
 end

@@ -23,15 +23,15 @@ else
     % Arena from circular 200cm radius to square 75x75cm 
     arena_half = 37.5;
     temp_velocity = rand()/2;
-    position_x = zeros(100000,1);
-    position_y = zeros(100000,1);
-    headDirection = zeros(100000,1)';
+    position_x = zeros(10000,1);
+    position_y = zeros(10000,1);
+    headDirection = zeros(10000,1)';
     % Random start
     position_x(1) = (rand()-0.5)*75;
     position_y(1) = (rand()-0.5)*75;
     headDirection(1) = rand()*2*pi;
     
-    for i = 2:100000
+    for i = 2:10000
         % max acceleration is .1 cm/ms^2
         temp_rand = max(min(normrnd(0,.05),.2),-.2); 
         
