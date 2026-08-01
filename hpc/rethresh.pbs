@@ -1,0 +1,23 @@
+#!/bin/bash
+#PBS -N gc_rethresh
+#PBS -l select=1:ncpus=1:mem=16gb
+#PBS -l walltime=04:00:00
+#PBS -o /rds/general/user/tw2825/ephemeral/hpc_ying_run/logs/
+#PBS -e /rds/general/user/tw2825/ephemeral/hpc_ying_run/logs/
+
+# Offline re-thresholding of the whole sweep from the stored spectra.
+# Reads all 5040 bd_*.mat in output_band2, re-applies the detection step at
+# 5 thresholds, writes one small summary (agg_rethresh.mat) you can copy off.
+# Single job, not an array -- it is I/O bound, not compute bound.
+
+module load tools/prod
+module load MATLAB/2024b
+
+export MATLAB_PREFDIR=/rds/general/user/tw2825/ephemeral/matlab_prefs
+export TMPDIR=/rds/general/user/tw2825/ephemeral/tmp
+mkdir -p "$MATLAB_PREFDIR" "$TMPDIR"
+
+cd /rds/general/user/tw2825/ephemeral/hpc_ying_run/code
+echo "start $(date)"
+matlab -nodisplay -nosplash -batch "rethreshold_band"
+echo "done $(date) exit=$?"
