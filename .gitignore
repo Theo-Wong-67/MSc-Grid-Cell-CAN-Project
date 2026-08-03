@@ -1,1 +1,34 @@
 *.asv
+*~
+ 
+# ---- large data and results: repo is code only ----
+results/
+outputs/
+data/
+figures/
+_quarantine/
+seeds_by_task.txt
+*.mat
+*.tar.gz
+*.zip
+ 
+# ---- kept on the local machine only ----
+# NB the committed code contains "see docs/..." references, and validation/
+# holds the evidence for the replication claim. Delete these three lines to
+# include them -- they total well under 100 KB.
+docs/
+validation/
+aggregate/
+ 
+# ---- third-party, vendored for reproducibility: code only ----
+# chronux ships inside CMBHOME and is not used anywhere in this pipeline
+# (~27 MB of .m and .html). Re-include it only if you start using CMBHOME
+# functionality beyond Gridness / moserac / extrema2 / Ellipse*.
+CMBHOME-master/chronux/
+ 
+# Ying's data trees -- ~5 GB, already caught by *.mat but listed explicitly
+Code-for-Ying-et-al.-2023-main/session_data/
+Code-for-Ying-et-al.-2023-main/session_data2/
+Code-for-Ying-et-al.-2023-main/grid data/
+# regenerated locally from a saved grid -- not source
+*_replot*.png

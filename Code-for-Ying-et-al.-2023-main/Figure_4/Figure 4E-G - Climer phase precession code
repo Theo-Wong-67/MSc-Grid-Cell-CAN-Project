@@ -1,0 +1,167 @@
+% Calculate phase precession
+% Note: This script uses Jason Climer's phase precession code 
+%Accessible at: https://github.com/jrclimer/Pass_Index
+
+clear
+load('grid_hex_rec2.mat') %load session data
+
+process_mat = {wtydir1,wtydir2,wtadir1,wtadir2,j20ydir1,j20ydir2,j20adir1,j20adir2};
+
+exportToPPTX('new','Dimensions',[16 9]); %create new ppt file
+
+for i = 1:size(process_mat,2)
+    for j = 1:size(process_mat{i}(:,3),1)
+
+        clearvars -except i j process_mat
+        Dat = load('V:\Yoshida_lab_shared_folder\Shared Data\Motoharu\Mark_Johnson_Data\Objects\'+string(process_mat{i}(j,3))+'.mat');
+
+        switch process_mat{i}{j,4}(1,1)
+            case 1
+                LFP_ts = Dat.root.b_lfp(1, 1).ts;
+                LFP_signal = Dat.root.b_lfp(1, 1).signal;
+            case 2
+                LFP_ts = Dat.root.b_lfp(1, 5).ts;
+                LFP_signal = Dat.root.b_lfp(1, 5).signal;
+            case 3
+                LFP_ts = Dat.root.b_lfp(1, 9).ts;
+                LFP_signal = Dat.root.b_lfp(1, 9).signal;
+            case 4
+                LFP_ts = Dat.root.b_lfp(1, 13).ts;
+                LFP_signal = Dat.root.b_lfp(1, 13).signal;
+        end
+        
+        P = pass_index(Dat.root.ts,[(Dat.root.x.*0.2) (Dat.root.y.*0.2)],Dat.root.spike(process_mat{i}{j,4}(1,1),process_mat{i}{j,4}(1,2)).ts,LFP_ts,LFP_signal,'method','grid','sample_along','arc_length');
+        Ph_precess = P.is_precessing;
+        Ph_slope = P.s;
+        Ph_rho = P.rho;
+        Ph_p = P.p;
+        
+        process_mat{i}{j,10} = Ph_precess;
+        process_mat{i}{j,11} = Ph_slope;
+        process_mat{i}{j,12} = Ph_rho;
+        process_mat{i}{j,13} = Ph_p;
+        process_mat{i}{j,14} = P.rate_map;
+        process_mat{i}{j,15} = P.field_index_map;
+        process_mat{i}{j,16} = P.centers;
+        process_mat{i}{j,17} = P.ts;
+        process_mat{i}{j,18} = P.cs;
+        process_mat{i}{j,19} = P.field_index;
+        process_mat{i}{j,20} = P.filtered_field_index;
+        process_mat{i}{j,21} = P.pass_index;
+        process_mat{i}{j,22} = P.spk_pass_index;
+        process_mat{i}{j,23} = P.spk_theta_phase;
+        process_mat{i}{j,24} = P.density;
+        process_mat{i}{j,25} = P.filtered_lfp;
+        process_mat{i}{j,24} = P.filtered_lfp_phase;
+
+        if P.is_precessing == 1
+            hold on
+            P = pass_index(Dat.root.ts,[(Dat.root.x.*0.2) (Dat.root.y.*0.2)],Dat.root.spike(process_mat{i}{j,4}(1,1),process_mat{i}{j,4}(1,2)).ts,LFP_ts,LFP_signal,'plots', 'all','method','grid','sample_along','arc_length');
+            sgtitle(string(process_mat{i}{j, 3}))
+            subplot(2,3,6)
+            text(0.5,0.5,string(process_mat{i}{j, 4}(1,:)))
+            exportToPPTX('addslide'); %add a slide  
+            exportToPPTX('addpicture',gcf); %save what you plotted in to the slide
+            close all
+        end
+        
+
+        
+    end
+end
+exportToPPTX('saveandclose', 'C:\datatest\Mark project\Phase_precession2.pptx'); %save ppt file
+save('V:\Yoshida_lab_shared_folder\Shared Data\Motoharu\Mark_Johnson_Data\Objects\Phase_precession2.mat', 'process_mat', '-v7.3');
+
+%%%%
+%Figure E plot was generated from the info found in 'process_mat'.mat. 
+
+%rho
+
+%hexagonal
+wty1 = cell2mat(process_mat{1, 1}(:,12));
+wta1 = cell2mat(process_mat{1, 3}(:,12));
+j20y1 = cell2mat(process_mat{1, 5}(:,12));
+j20a1 = cell2mat(process_mat{1, 7}(:,12));
+
+%quadrant-like
+wty2 = cell2mat(process_mat{1, 2}(:,12));
+wta2 = cell2mat(process_mat{1, 4}(:,12));
+j20y2 = cell2mat(process_mat{1, 6}(:,12));
+j20a2 = cell2mat(process_mat{1, 8}(:,12));
+
+%aggregate all data
+wty = [wty1;wty2];
+wta = [wta1;wta2];
+j20y = [j20y1;j20y2];
+j20a = [j20a1;j20a2];
+
+%cdf plot
+cdfplot(wty)
+hold on
+cdfplot(wta)
+hold on
+cdfplot(j20y)
+hold on 
+cdfplot(j20a)
+axis square
+
+%bar plot
+wty_med = nanmedian(wty)
+wto_med = nanmedian(wta)
+j20y_med = nanmedian(j20y)
+j20o_med = nanmedian(j20a)
+
+wty25 = prctile(wty,25)
+wty75 = prctile(wty,75)
+wto25 = prctile(wta,25)
+wto75 = prctile(wta,75)
+j20y25 = prctile(j20y,25)
+j20y75 = prctile(j20y,75)
+j20o25 = prctile(j20a,25)
+j20o75 = prctile(j20a,75)
+
+medianvalues = [wty_med;wto_med;j20y_med;j20o_med];
+
+figure
+bar(medianvalues,'k', 'FaceAlpha',0.2)
+hold on
+line([1 1], [wty25 wty75]);
+hold on
+line([2 2], [wto25 wto75]);
+hold on
+line([3 3], [j20y25 j20y75]);
+hold on
+line([4 4], [j20o25 j20o75]);
+hold on
+
+ranksum(wty,wta)
+ranksum(wty,j20y)
+ranksum(j20y,j20a)
+ranksum(wta,j20a)
+
+% 2-way ANOVA for grid score (or any other metric) 
+
+grid = [wty;wta;j20y;j20a];
+
+sizeWTy = size(wty); sizeWTy = sizeWTy(1,1);
+sizeWTa = size(wta); sizeWTa = sizeWTa(1,1);
+sizeJ20y = size(j20y); sizeJ20y = sizeJ20y(1,1);
+sizeJ20a = size(j20a); sizeJ20a = sizeJ20a(1,1);
+
+A = repmat('young',sizeWTy,1);
+B = repmat('aged ',sizeWTa,1);
+C = repmat('young',sizeJ20y,1);
+D = repmat('aged ',sizeJ20a,1);
+
+Ages =[A;B;C;D];
+
+A = repmat('b_nTG',sizeWTy,1);
+B = repmat('b_nTG',sizeWTa,1);
+C = repmat('a_J20',sizeJ20y,1);
+D = repmat('a_J20',sizeJ20a,1);
+
+Genotype2 =[A;B;C;D];
+
+[p,tbl,stats] = anovan(grid,{Ages Genotype2},'model',2,'varnames',{'Age','Genotype'})
+
+%Figures F-G code not shown here. But all it involves is looking at which cell is considered phase precession via column 10 in process_mat. 1 = phase precessing, 0 = non-phase precessing.

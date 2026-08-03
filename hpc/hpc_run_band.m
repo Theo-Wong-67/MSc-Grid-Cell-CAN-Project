@@ -1,44 +1,5 @@
 function hpc_run_band(task)
 % HPC_RUN_BAND  High-resolution sweep over the alpha x R plane for Ying's 60/90 ratio.
-%
-%   Variant of hpc_run_one. Same task-indexing scheme (seed varies fastest,
-%   then R, then alpha) and same save/analysis pipeline.
-%
-%     1. GRID -- full plane at high resolution (was the graded band only):
-%           alpha in 0:0.02:1                                     (51)
-%           R     in 0:2:90                                       (46)
-%        R = 2 steps roughly halves the previous spacing, which is what resolves
-%        commensurability against lambda = 13: the horizontal banding in the old
-%        phase diagrams was sampled at R steps of 3 and could not be told apart
-%        from seed noise. At step 2, adjacent R rows are near-replicates of each
-%        other, so the row-to-row scatter doubles as a free seed-noise estimate.
-%     2. SEEDS 5 -> 8 (running ratio plateaus by ~6 seeds, so 8 is past it).
-%     3. TRACKED POPULATION: instead of 14 core + 16 lattice (30), a dense
-%        radial-angular sample across the whole damage disk (~60 neurons). The
-%        60/90 ratio is pooled over the DAMAGED (inside-disk) subset, so a bigger
-%        interior sample per simulation is the cheapest way to add statistics --
-%        the 400k-step sim is shared across all tracked cells.
-%
-%   => 51*46*8 = 18768 tasks. Submit as a PBS array 1-18768.
-%      CHECK THE CLUSTER'S ARRAY-LENGTH CAP FIRST -- this may need splitting into
-%      chunks (e.g. -J 1-10000 then -J 10001-18768).
-%
-%   DEGENERATE EDGES, BY DESIGN. R = 0 applies no damage, so alpha has no effect
-%   there; alpha = 1 applies no attenuation, so R has no effect there. Both edges
-%   are therefore the healthy network, and about 4% of tasks (768) are replicates
-%   of it. That is deliberate: the R = 0 row and the alpha = 1 column must both
-%   come out at the healthy value, which is a built-in consistency check on the
-%   whole diagram. If they disagree, something is wrong upstream.
-%
-%   Spectra ARE saved: the baseline-subtracted, PRE-threshold power spectrum per
-%   tracked neuron (81x81 single). That is the object the detection threshold
-%   acts on, so any threshold, absolute cutoff, or harmonic-rejection rule can be
-%   re-applied offline without re-simulating. Costs ~2 MB per task.
-%
-%   TO RUN: set `home` below to your HPC home, drop this in the code folder, and
-%   submit the array. Output lands in output_band3 -- a NEW folder, because the
-%   grid changed and a stale file from the old 21x30 grid would silently merge
-%   into the new one (alpha = 0.70 and R = 4 are valid points on both).
 
     if nargin < 1 || isempty(task)
         idx = getenv('PBS_ARRAY_INDEX');
@@ -97,8 +58,6 @@ function hpc_run_band(task)
     inside = ismember(tracked, dmg.idx_damaged(:)');    % damaged cells (disk radius R)
 
     % spectra = baseline-subtracted power, PRE-threshold, 81x81 x NTRACK single.
-    % Capturing vs discarding an output does not change execution, so every other
-    % result is bit-identical to the previous run of this file.
     % spectra(:,:,i) corresponds to tracked(i).
     [cc_all, phi_cell, spectra, gridness, lobe_cell] = population_fourier_analysis(rm_raw, rm_smooth, THRESH, tracked);
     counts = cc_all(tracked);

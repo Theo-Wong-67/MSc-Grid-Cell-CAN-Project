@@ -1,13 +1,11 @@
-function [com_count, phi_cell, spectra, gridness, lobe_cell] = population_fourier_analysis(rm_raw, rm_smooth, thresh, neuron_subset)   % <<< CHANGED: +lobe_cell out
+function [com_count, phi_cell, spectra, gridness, lobe_cell] = population_fourier_analysis(rm_raw, rm_smooth, thresh, neuron_subset)  
     % Calculates Fourier component analysis for every tracked neuron.
     % Computes component counts, grid spacing (moserac autocorrelogram), gridness,
     % and the Fourier symmetry ratio.
-    %
-    % <<< ADDED: all five edits below are marked "<<< CHANGED" or "<<< ADDED".
-    % Convention now follows Ying et al. (2023) exactly; see
-    % CAN_ying_implementation_diff.md sections B1, D1, D3, E1-E2 for the evidence.
+    % Convention follows Ying et al. (2023)
+
     warning('off');
-    ANG_CENTRE = [128.5, 128.5];   % <<< ADDED: Ying's spectrum centre (129 is the true DC; theirs is half a pixel off, kept deliberately)
+    ANG_CENTRE = [128.5, 128.5];   % Followed Ying's spectrum centre 
     bin_cm      = 75/36;
     n_shuffle   = 50; % Voronoi shuffle count
     [n_bins, ~, n_neurons] = size(rm_raw);
@@ -18,11 +16,11 @@ function [com_count, phi_cell, spectra, gridness, lobe_cell] = population_fourie
 
     % Counts
     all_wl      = [];
-    all_seeds   = [];   % <<< ADDED: Voronoi seed count per cell
+    all_seeds   = [];   
     count_60    = 0;
     count_90    = 0;
 
-    % Random display k neurons
+    % Display k neurons
     n_disp = 25;
     n_display_maps  = min([n_disp, n_neurons, numel(neuron_subset)]);
     rand_idx        = neuron_subset(randperm(numel(neuron_subset), n_display_maps));
@@ -33,7 +31,7 @@ function [com_count, phi_cell, spectra, gridness, lobe_cell] = population_fourie
     com_count = zeros(n_neurons, 1);
     gridness  = nan(n_neurons, 1);
     phi_cell  = cell(n_neurons, 1);
-    lobe_cell = cell(n_neurons, 1);   % <<< ADDED: lobe angles 0-360, what Ying's statistic consumes
+    lobe_cell = cell(n_neurons, 1);  
     CROP    = 40;                       % half-width of stored spectrum crop (px)
     CROP_R  = CENTRE(1)-CROP : CENTRE(1)+CROP;
     CROP_C  = CENTRE(2)-CROP : CENTRE(2)+CROP;
@@ -58,9 +56,9 @@ function [com_count, phi_cell, spectra, gridness, lobe_cell] = population_fourie
         % Step 1-6: Zero-padded FFT, normalisation, square, fftshift, DC notch
         power       = compute_power(rm, mean_fr, n_bins, PAD, offset);
         % Step 7-8: Subtract baseline, clip negatives
-        [base_k, nseed_k] = voronoi_baseline(rm, rm_fields, n_bins, PAD,n_shuffle);   % <<< CHANGED: was prc95_k (now 75th); +nseed
-        all_seeds(end+1) = nseed_k;                                              % <<< ADDED: Voronoi seed count, checked in the summary
-        power_clean =  max(power - base_k, 0);                                   % <<< CHANGED: renamed only
+        [base_k, nseed_k] = voronoi_baseline(rm, rm_fields, n_bins, PAD,n_shuffle);
+        all_seeds(end+1) = nseed_k;                                             
+        power_clean =  max(power - base_k, 0);
         spectra(:,:,si) = single(power_clean(CROP_R, CROP_C));  % pre-threshold, for re-analysis
         % Step 9: Zero below threhold
         power_clean(power_clean < thresh*max(power_clean(:))) = 0;
@@ -79,15 +77,13 @@ function [com_count, phi_cell, spectra, gridness, lobe_cell] = population_fourie
         cen_col = all_cen(:,1);
         cen_row = all_cen(:,2);
 
-        dx      = cen_col - ANG_CENTRE(1);   % <<< CHANGED: was CENTRE(1)
-        dy      = cen_row - ANG_CENTRE(2);   % <<< CHANGED: was CENTRE(2)
+        dx      = cen_col - ANG_CENTRE(1);  
+        dy      = cen_row - ANG_CENTRE(2);   
         if isempty(dx), continue; end % Damage guard
 
-        % Component analysis
-        % <<< CHANGED: was  phi = atan2d(dy, dx);
-        % Ying take the angle of the RECIPROCAL vector (2*pi/kx, 2*pi/ky). Their dy is
-        % up-positive, ours row-positive-down, hence the sign on wy. NaN reproduces
-        % their divide-by-exactly-zero (~7 of their 171 cells).
+        % Component analysis. Ying take the angle of the RECIPROCAL vector
+        % (2*pi/kx, 2*pi/ky); their dy is up-positive, ours row-positive-down,
+        % hence the sign. NaN reproduces their divide-by-exactly-zero.
         phi = mod(atan2d(-1 ./ dy, 1 ./ dx), 360);
         phi(dx == 0 | dy == 0) = NaN;
         [sp_cm, gr_cell] = ac_metrics(rm_fields, bin_cm);
@@ -103,15 +99,15 @@ function [com_count, phi_cell, spectra, gridness, lobe_cell] = population_fourie
         phi_sorted   = sort(mod(phi(:), 180));                    % Sort For degree testing
         phi_unique   = phi_sorted([true; diff(phi_sorted) > 10]); % <10 deg difference is the same component
         phi_cell{k}  = phi_unique;   % per-cell axis orientations (deg, mod 180)
-        lobes        = sort(phi(~isnan(phi)));                                 
-        lobe_cell{k} = lobes(:);                                                
+        lobes        = sort(phi(~isnan(phi)));                          
+        lobe_cell{k} = lobes(:);                                              
 
         % Symmetry
         if numel(lobes) >= 2
-            lobes_w   = [lobes(:); lobes(1) + 360];                           
-            all_diffs = abs(diff(lobes_w));                                 
+            lobes_w   = [lobes(:); lobes(1) + 360];                            
+            all_diffs = abs(diff(lobes_w));                                     
             count_60 = count_60 + sum(all_diffs > 50 & all_diffs < 70);        
-            count_90 = count_90 + sum(all_diffs > 80 & all_diffs < 100);      
+            count_90 = count_90 + sum(all_diffs > 80 & all_diffs < 100);        
         end
     end 
 
@@ -124,9 +120,9 @@ function [com_count, phi_cell, spectra, gridness, lobe_cell] = population_fourie
     xlim([0 8]);
     title(sprintf('Component count distribution  |  %d neurons', numel(neuron_subset)));
 
-    % <<< ADDED: Voronoi seeding check. Ying's maps gave ~40-140 segments
-    % (their own histogram, extraction line 1301). Too few seeds => patches too large
-    % => the shuffle keeps too much structure => the noise floor comes out too LOW.
+    % Voronoi seeding check. Ying's maps gave ~40-140 segments (their own
+    % histogram, extraction line 1301). Too few seeds => patches too large =>
+    % the shuffle keeps too much structure => the noise floor comes out too LOW.
     if ~isempty(all_seeds)
         fprintf('\n[population_fourier_analysis] Voronoi seeds/cell: median %.0f (min %d, max %d)\n', ...
             median(all_seeds), min(all_seeds), max(all_seeds));
@@ -216,29 +212,13 @@ end
 
 
 function [baseline, nseed] = voronoi_baseline(rm_raw, rm_smooth_for_fields, n_bins, PAD, n_shuffle)   %#ok<INUSL>
-    % <<< ADDED: PRC is paired with the SHUFFLE TYPE -- do not change it alone.
-    % Ying use 75 with a Voronoi shuffle (the script that built grid_data.mat) and
-    % 95 only with a spike-time shuffle, whose null has far lower power. The old
-    % setting here (Voronoi + 95) was stricter than either, and stripped marginal
-    % components from DEGRADED cells specifically: +60% APP-y, +30% APP-a vs ~+3%
-    % on both controls -- i.e. it compressed the contrast the biomarker measures.
-    PRC = 75;   % <<< ADDED
-
-    % <<< CHANGED: seed the tessellation from a LIGHTLY smoothed copy of the RAW map,
-    % not from the caller's rm_smooth (which is also used for gridness and should not
-    % be overloaded). Ying seeded their Voronoi loop from a kernel-2 map (extraction
-    % line 226), whereas grid_data col 2 is kernel-4 (line 1322). Passing col 2 gave a
-    % median of 21 seeds against their ~40-140: patches too large, so the shuffle
-    % relocated big coherent chunks, the shuffled maps kept too much periodic
-    % structure, power stayed concentrated, and the 75th percentile came out 19% LOW
-    % (measured 0.811 x theirs, 11 of 12 cells). SEED_SIGMA = 0.5 restores ~104 seeds
-    % and removes the bias (0.811 -> 1.065, sign mixed). Costs ~3.4x runtime.
-    SEED_SIGMA = 0.5;
+    PRC = 75;   % Was 95
+    SEED_SIGMA = 0.5; 
     img  = double(rm_raw);
     imgo = imgaussfilt(img, SEED_SIGMA);
     imgPros = imregionalmax(imgo, 4);
     objects = regionprops(imgPros, {'Centroid'});
-    nseed = numel(objects);          % <<< ADDED: reported by the caller, see summary
+    nseed = numel(objects);        
     if nseed < 2
         baseline = Inf;   % cannot shuffle -> nothing passes (conservative)
         return
@@ -295,68 +275,58 @@ function [baseline, nseed] = voronoi_baseline(rm_raw, rm_smooth_for_fields, n_bi
         allpowers=[allpowers; reshape(powr3,[],1)];
         clear allPoly2 allPoly3 allPoly4 allPoly5 virtual fm
     end
-    baseline = prctile(allpowers, PRC);   % <<< CHANGED: was hardcoded 95
+    baseline = prctile(allpowers, PRC);
 end
 
 
 function [spacing_cm, gridness] = ac_metrics(rm, bin_cm)
-%AC_METRICS  Grid spacing and gridness from the moserac autocorrelogram.
-%   Follows Ying et al. (2023) / Brandon et al. (2011).
-%
-%   spacing_cm : median distance to the six central peaks, in cm.
-%
-%   gridness   : elliptical distortion is first corrected -- the major and minor
-%                axes are determined from the six closest fields to the central
-%                peak and the whole autocorrelogram is compressed so the major
-%                axis equals the minor. Large eccentricities (minor < half the
-%                major) are left uncorrected, as in Ying et al. The ring holding
-%                the six peaks is then rotated and correlated with itself:
-%                    gridness = min(r60, r120) - max(r30, r90, r150)
-%                Good grids score ~1.0-1.4. (Ying's STAR Methods states this
-%                difference the other way round, but their positive 0.54
-%                selection threshold implies the standard form used here.)
+%   AC_METRICS  Grid spacing and gridness from the rate-map autocorrelogram.
+%   Requires CMBHOME on the path (moserac, CMBHOME.Utils.extrema2,
+%   CMBHOME.Session.Gridness).
     spacing_cm = NaN; gridness = NaN;
     rm(~isfinite(rm)) = 0;
     if max(rm(:)) <= 0, return; end
+
     ac = moserac(rm, rm, 25);
-    c  = ceil(size(ac,1)/2);
-    a2 = ac; a2(isnan(a2)) = -Inf;
-    [yy,xx] = find(imregionalmax(a2));
-    val = ac(sub2ind(size(ac), yy, xx));
-    d   = hypot(yy-c, xx-c);
-    keep = d > 2 & isfinite(val) & val > 0;      % exclude the central peak
-    yy = yy(keep); xx = xx(keep); d = d(keep);
-    if numel(d) < 6, return; end
-    [~,o] = sort(d); o = o(1:6);
-    P = [xx(o)-c, yy(o)-c];                      % six closest peak offsets
-    spacing_cm = median(hypot(P(:,1),P(:,2))) * bin_cm;
 
-    % --- elliptical correction (Brandon et al. 2011; Ying et al. 2023) ---
-    Mi = (P'*P)/6;
-    [V,Dg] = eig(Mi); [lam,ix] = sort(diag(Dg),'descend');
-    ecc = sqrt(lam(2))/sqrt(lam(1));             % minor / major
-    th  = atan2(V(2,ix(1)), V(1,ix(1)));         % major axis orientation
-    if ecc >= 0.5                                % large eccentricities uncorrected
-        Rm = [cos(th) -sin(th); sin(th) cos(th)];
-        A  = Rm * diag([ecc 1]) * Rm';
-        T  = affine2d([A(1,1) A(2,1) 0; A(1,2) A(2,2) 0; 0 0 1]);
-        RA = imref2d(size(ac), [1 size(ac,2)]-c, [1 size(ac,1)]-c);
-        ac = imwarp(ac, RA, T, 'OutputView', RA, 'FillValues', 0);
-        P  = (A*P')';
+    % --- spacing: CMBHOME gridDistance.m, transcribed (Pd = 7, thresh = -Inf) ---
+    [~, inds] = CMBHOME.Utils.extrema2(ac);
+    if ~isempty(inds)
+        [rowInd, colInd] = ind2sub(size(ac), inds);
+        [~, ord] = sort(ac(inds), 'descend');
+        idelete = false(numel(ord),1);
+        for i = 1:numel(ord)                       % drop peaks closer than Pd
+            i1 = ord(i);                           % to any taller peak
+            for k = 1:i-1
+                i2 = ord(k);
+                if hypot(rowInd(i1)-rowInd(i2), colInd(i1)-colInd(i2)) < 7
+                    idelete(i) = true;
+                end
+            end
+        end
+        ord(idelete) = [];
+        rowInd = rowInd(ord); colInd = colInd(ord);   % ordered tallest first
+        if numel(rowInd) >= 7
+            d = sort(hypot(rowInd - rowInd(1), colInd - colInd(1)));
+            spacing_cm = median(d(2:7)) * bin_cm;  % their d(2:7), median taken here
+        end
     end
 
-    % --- rotational gridness on the ring of six peaks ---
-    rmean = mean(hypot(P(:,1),P(:,2)));
-    [GX,GY] = ndgrid(1:size(ac,1), 1:size(ac,2));
-    RR   = hypot(GX-c, GY-c);
-    mask = RR > 0.35*rmean & RR < 1.25*rmean;
-    if nnz(mask) < 20, return; end
-    v0 = ac(mask); v0(~isfinite(v0)) = 0;
-    rot = [30 60 90 120 150]; rc = zeros(1,5);
-    for i = 1:5
-        AA = imrotate(ac, rot(i), 'bilinear', 'crop');
-        va = AA(mask); va(~isfinite(va)) = 0;
-        rc(i) = corr(v0, va);
+    % --- gridness: CMBHOME's own implementation, called directly ---
+    persistent S warned
+    if isempty(S), [~] = evalc('S = CMBHOME.Session();'); end
+    try
+        % evalc, not a bare call: Gridness disp()s "No cells in session object"
+        % on every invocation via self.epoch. 78 lines a run here, ~1.4M across
+        % a full sweep. Errors still raise -- evalc only swallows stdout.
+        [~] = evalc(['gridness = S.Gridness([], ''autocorr'', ac, ''grid3'', 1, ' ...
+                     '''rotate_inc'', 30, ''supress_plot'', 1);']);
+    catch ME
+        gridness = NaN;                            % degenerate autocorrelogram
+        if isempty(warned)                         % report once, to stderr:
+            warned = true;                         % line 9's warning('off')
+            fprintf(2, '[ac_metrics] CMBHOME Gridness failed: %s\n', ME.message);
+        end                                        % would swallow a warning()
     end
-    gridness = min(rc([2 4])) - max(rc([1 3 5]));
+    if isempty(gridness), gridness = NaN; end
 end
