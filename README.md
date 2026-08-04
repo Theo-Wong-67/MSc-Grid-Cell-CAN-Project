@@ -1,20 +1,17 @@
 # MSc Grid-Cell CAN Project
 
-A continuous attractor network (CAN) model of grid cells, used to ask whether the
+A continuous attractor network (CAN) model of grid cells to ask whether the
 60°/90° Fourier symmetry biomarker of Ying et al. (2023) can be reproduced by
 localised synaptic damage and by afferent velocity noise.
 
 The analysis pipeline is validated against Ying et al.'s released data before
-being applied to model output: their published group ratios reproduce to five
-significant figures with identical blob detection on 171/171 cells.
+being applied to model output.
 
 ---
 
 ## Third-party code is **not** included
 
-Two dependencies are required but deliberately absent from this repository:
-neither carries a licence upstream, so neither grants redistribution rights.
-Download them yourself and place them in the project root.
+Two dependencies are required but absent, below are the downloading links:
 
 ### 1. CMBHOME (Hasselmo Lab, Boston University)
 
@@ -30,15 +27,10 @@ MSc-Grid-Cell-CAN-Project/
     └── +CMBHOME/          <- the package folder; its PARENT goes on the path
 ```
 
-`startup_paths.m` adds `CMBHOME-master`, not `+CMBHOME` — MATLAB resolves
-packages from the parent directory. The bundled `chronux` subfolder is unused;
-do not `genpath` it or several hundred shadowing folders land on your path.
+`startup_paths.m` adds `CMBHOME-master`, not `+CMBHOME`.
 
 **One local modification is required.** In `+CMBHOME/@Session/ValidCells.m`,
-comment out `disp('No cells in session object')`. This project uses `Session`
-only as a carrier for `Gridness`, called with a precomputed autocorrelogram, so
-the object never holds spike data and that line fires on every property access —
-78 lines per run, ~1.4M across a full sweep. Behaviour is otherwise unchanged.
+comment out `disp('No cells in session object')`.
 
 ### 2. Code for Ying et al. (2023)
 
@@ -72,13 +64,7 @@ run('<project root>/startup_paths.m')
 ```
 
 Adds `model/`, `analysis/`, `hpc/`, `aggregate/`, `validation/`, `CMBHOME-master/`
-and Ying's `rotateAround/` to the path, then checks that every external
-dependency resolves — so a missing download fails in the first second rather than
-after a 400,000-step simulation.
-
-If MATLAB cannot find `startup_paths` by name, the project root is not on the
-path; `run()` with the full path works from anywhere. For a permanent fix, put a
-one-line `startup.m` calling it in your `userpath`.
+and Ying's `rotateAround/` to the path.
 
 Developed on MATLAB R2025b; the cluster runs R2024b.
 
