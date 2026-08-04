@@ -287,7 +287,7 @@ function [spacing_cm, gridness] = ac_metrics(rm, bin_cm)
     rm(~isfinite(rm)) = 0;
     if max(rm(:)) <= 0, return; end
 
-    ac = moserac(rm, rm, 25);
+    ac = CMBHOME.Utils.moserac(rm, rm, 25);   % qualified: not vendored in this repo
 
     % --- spacing: CMBHOME gridDistance.m, transcribed (Pd = 7, thresh = -Inf) ---
     [~, inds] = CMBHOME.Utils.extrema2(ac);

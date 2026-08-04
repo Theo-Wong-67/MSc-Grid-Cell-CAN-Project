@@ -32,3 +32,10 @@ Code-for-Ying-et-al.-2023-main/session_data2/
 Code-for-Ying-et-al.-2023-main/grid data/
 # regenerated locally from a saved grid -- not source
 *_replot*.png
+
+# Third-party code, NOT redistributed: neither upstream carries a licence,
+# so no redistribution permission is granted. See README for download steps.
+CMBHOME-master/
+Code-for-Ying-et-al.-2023-main/
+analysis/moserac.m
+analysis/rotateAround.m
