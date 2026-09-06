@@ -1,0 +1,183 @@
+function [rm_raw, rm_smooth, dmg] = ...
+    gc_combined(n, tau, dt, beta, alphabar, abar, wtphase, steps, eta_0, a, R, sigma_v)
+% Parameter in correspondence with Burak & Fiete (2009):
+%   n        — network side length (N = n×n neurons)
+%   tau      — neural time constant τ (ms)
+%   dt       — simulation time step (ms)
+%   beta     — inhibitory Gaussian decay rate β = 3/λ², where λ = 13 (lattice periodicity)
+%   alphabar — excitatory Gaussian decay rate γ/β = 1.05
+%   abar     — excitatory amplitude a
+%   wtphase  — weight shift l (neurons)
+%   steps    — number of steps taken
+%   eta_0    — translation velocity scaling
+%   a        — synaptic scaling 0 < a < 1                (Zhi & Cox 2021)
+%   R        — damage radius                             (Zhi & Cox 2021)
+%   sigma_v  — afferent velocity-noise SD (m/s)          (Nagaraj & Narayanan 2024)
+
+% Outputs:
+%   rm_raw      — n^2 unsmoothed rate maps (n_bins × n_bins)
+%   rm_smooth   — n^2 smoothed rate maps (n_bins × n_bins)
+%   dmg         — damage mask and bookkeeping, as gc_alpha
+
+
+    % Burak & Fiete (2009) random walk model from released code, speeds are 5x observed in
+    % ying et al., 2023 to decrease simulation time required for the same
+    % coverage of the enclosure (Nagaraj & Narayanan, 2024), while keeping difference within an order
+    % of magnitude. This is possible because grid pattern flow is determined by eta_0/dt and
+    % independent of velocity (Zhi & Cox, 2021)
+    en_length = 75; en_half = en_length/2;  % Ying et al. (2023) enclosure specs
+    pos_x = zeros(steps,1); pos_y = zeros(steps, 1);
+    pos_x(1) = 0; pos_y(1) = 0;
+    head_dir = zeros(steps,1);
+    head_dir(1) = rand()*2*pi;              % Random initial heading direction
+    temp_vel = rand() * 0.025;
+    for i = 2:steps
+        temp_accel  = max(min(normrnd(0,0.01), 0.02), -0.02);   % Max accel at 0.02 and Min at -0.02
+        temp_vel    = min(max(temp_vel + temp_accel,0), 0.05);  % Max vel at 0.05 and Min at 0
+        L_Or_R = randi([0, 1]) * 2 - 1;                         % Output -1 (right turn) or 1 (left turn)
+        next_x = pos_x(i-1) + temp_vel*cos(head_dir(i-1));
+        next_y = pos_y(i-1) + temp_vel*sin(head_dir(i-1));
+        % Keep the animal within the enclosure
+        while abs(next_x) > en_half || abs(next_y) > en_half    % Absolute position below half of enclosure length
+            head_dir(i-1) = head_dir(i-1) + L_Or_R*pi/100;      % Rotate by pi/100 until next step is within enclosure
+            next_x = pos_x(i-1) + temp_vel*cos(head_dir(i-1));
+            next_y = pos_y(i-1) + temp_vel*sin(head_dir(i-1));
+        end
+        pos_x(i)    = next_x;
+        pos_y(i)    = next_y;
+        head_dir(i) = mod(head_dir(i-1) + (rand()-0.5)/5*pi/2, 2*pi); % Circular mapped heading direction
+    end
+
+    % Neuron indexing
+    n_neurons = n^2;               % Square neuron sheet
+    neuron_idx = (1:1:n_neurons)'; % Neuron indexing
+
+    % Rate map discretisation
+    n_bins      = 36;                                     % Number of spatial bins in Ying et al., 2023
+    bin_edges   = linspace(-en_half, en_half, n_bins +1); % Find edges of the bins
+    rm_raw      = zeros(n_bins, n_bins, n^2);             % Initiate rate map bundles
+    rm_smooth   = zeros(n_bins, n_bins, n^2);
+
+    % Convolution padding
+    big = 2*n; % 256
+    dim = n/2;
+    % Initial population activity
+    r = zeros(n,n); % No firing rate initially
+    % Maps
+    spike_maps = zeros(n_bins, n_bins, n^2);
+    occupancy_map = zeros(n_bins, n_bins);
+
+    % Weight matrix building
+    x    = (-n/2):1:(n/2-1); %
+    lx   = length(x);
+    xbar = sqrt(beta)*x;     % Sub xbar to simplify equation
+
+    % Raw weights
+    w_0 = abar * exp(-alphabar*(ones(lx,1)*xbar.^2 + xbar'.^2*ones(1,lx)))...
+        -exp(-1*(ones(lx,1)*xbar.^2 + xbar'.^2*ones(1,lx)));      % Equation 3 Burak & Fiete 2009
+    % Aperiodic envelope A(xi)
+    venvelope = exp(-4*(x'.^2*ones(1,n)+ones(n,1)*x.^2)/(n/2)^2); % Equation 5 Burak & Fiete 2009
+
+    % Define sub-population of neurons through binary masks
+    typeL = repmat([[1,0];[0,0]], dim, dim); % Repeat mapping in both directions in the neural sheet
+    typeR = repmat([[0,0];[0,1]], dim, dim); % First indicates U D preferece, Second L R preference
+    typeU = repmat([[0,1];[0,0]], dim, dim);
+    typeD = repmat([[0,0];[1,0]], dim, dim);
+
+    % Shifted weighted matrix to create preferred direction of neurons
+    flshift = circshift(w_0, [0, -wtphase]); % Left  preference
+    frshift = circshift(w_0, [0,  wtphase]); % Right preference
+    fushift = circshift(w_0, [-wtphase, 0]); % Up    preference
+    fdshift = circshift(w_0, [ wtphase, 0]); % Down  preference
+
+    % Big FFT for initiation
+    ftl = fft2(flshift, big, big); % Padded for aperiodic boundary, linear convolution
+    ftr = fft2(frshift, big, big);
+    ftu = fft2(fushift, big, big);
+    ftd = fft2(fdshift, big, big);
+
+    % Small FFT for simulation
+    ftl_s = fft2(fftshift(flshift)); % Periodic boundary, circular convolution
+    ftr_s = fft2(fftshift(frshift));
+    ftu_s = fft2(fftshift(fushift));
+    ftd_s = fft2(fftshift(fdshift));
+
+    %% Zhi & Cox 2021 synaptic damage mask, with severity a, prevalence R
+    % Equation 6, Zhi & Cox 2021. Verbatim from gc_alpha.
+    [n_i, n_j] = ndgrid(1:n, 1:n);                                   % Generate
+    ns_centre               = n/2;                                   % Neural Sheet centre
+    is_dmg               = hypot(n_i-ns_centre, n_j-ns_centre) <= R; % Offset check
+    if R <= 0, is_dmg = false(n,n); end                              % Point guard
+    a_mask               = ones(n,n);                                % Healthy connectivity
+    a_mask(is_dmg)       = a;                                        % Damaged connectivity
+    dmg = struct('alpha',a, 'R',R, 'centre',ns_centre, 'mask',a_mask, ...
+                 'is_damaged',is_dmg, 'n_damaged',nnz(is_dmg), 'fraction',nnz(is_dmg)/n^2, ...
+                 'idx_damaged',find(is_dmg(:)), 'idx_healthy',find(~is_dmg(:))); % store parameters
+    %%
+    do_noise = ~isempty(sigma_v) && sigma_v > 0;
+    E = 0;
+
+    % Initiation Phase — undamaged and noise-free, as in gc_alpha: the pattern
+    % forms in a healthy network and the perturbations switch on afterwards.
+    for iter = 1:1000
+        if iter == 800
+            venvelope = ones(n,n); % Update to periodic boundary condition
+        end
+
+        rfield = venvelope.*(typeL+typeR+typeU+typeD); % Equation 4 Burak & Fiete 2009, v=0 initiation
+        convolution = real(ifft2( ...                  % Recurrent input, first term in the rectification
+        fft2(r.*typeL, big, big).*ftl + ...            % Sum of recurrent weights via convolution, ifft2 to save computation
+        fft2(r.*typeR, big, big).*ftr + ...
+        fft2(r.*typeU, big, big).*ftu + ...
+        fft2(r.*typeD, big, big).*ftd));
+        rfield = rfield + convolution(n/2+1:big-n/2, n/2+1:big-n/2); % Sum of weights and B
+        f_r = (rfield > 0) .* rfield;      % Rectification
+        r = min(10, (dt/tau)*(5*f_r-r)+r); % Equation 1 Burak & Fiete 2009, and their implementation in released code
+    end
+
+    % Simulation Phase
+    increment = 2; % Because pos(0) does not exist
+    for iter = 1:steps -20
+        theta_v = head_dir(increment);
+        vel = sqrt((pos_x(increment) - pos_x(increment-1))^2 + ...
+           (pos_y(increment) - pos_y(increment-1))^2) * (1/100) / (dt/1000); % Rescaled velocity
+        % Directional velocity representations
+        vx = vel*cos(theta_v); % Velocity in reference frame directions
+        vy = vel*sin(theta_v);
+        increment = increment + 1;
+        %% Nagaraj & Narayanan, 2024 noise application.
+        %  Noise is drawn for every neuron at every time step, and is only
+        %  applied to the preferred direction of the neuron
+        if do_noise, E = sigma_v*randn(n,n); end
+        rfield = venvelope .* ((1 + eta_0*(vx+E)).*typeR + (1 - eta_0*(vx+E)).*typeL + ...
+                               (1 + eta_0*(vy+E)).*typeU + (1 - eta_0*(vy+E)).*typeD); % Equation 4 Burak & Fiete 2009
+        %%
+        % Small convolution, same implementations as initiation phase
+        r_out = a_mask .* r;                        % Damage application, Zhi & Cox 2021 Eq 6
+        convolution = real(ifft2( ...
+        fft2(r_out.*typeL).*ftl_s + ...
+        fft2(r_out.*typeR).*ftr_s + ...
+        fft2(r_out.*typeU).*ftu_s + ...
+        fft2(r_out.*typeD).*ftd_s));
+        rfield = rfield + convolution;
+        f_r = (rfield > 0) .* rfield;
+        r  = min(10, (dt/tau) * (5*f_r - r) + r);   % Input remains intact
+
+        % Spatial binning
+        x_bin = discretize(pos_x(increment), bin_edges);
+        y_bin = discretize(pos_y(increment), bin_edges);
+
+        occupancy_map(y_bin, x_bin) = occupancy_map(y_bin, x_bin) +1; % Add 1 to the bin per time step in the bin
+        fr_tracked = f_r(neuron_idx);                                 % Accumulate firing rate values
+        spike_maps(y_bin, x_bin,:) = spike_maps(y_bin, x_bin,:) + ... % Add neuron activity to the bin its in
+            reshape(fr_tracked, 1,1,n_neurons);
+    end
+
+    % Rate map calculations and smoothing
+    for k = 1:n^2
+        rm               = spike_maps(:,:,k)./occupancy_map; % Occupancy normalisation
+        rm(occupancy_map == 0) = 0;                          % Guarding unvisited bins
+        rm_raw(:,:,k)    = rm;
+        rm_smooth(:,:,k) = imgaussfilt(rm, 2.5);             % Reduced smoothing compared to Ying et al., 2023 due to lower level of noise
+    end
+end

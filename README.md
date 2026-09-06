@@ -1,28 +1,51 @@
 # MSc Grid-Cell CAN Project
 
 A continuous attractor network (CAN) model of grid cells, used to ask whether the
-60°/90° Fourier symmetry biomarker of Ying et al. (2023) can be reproduced by
-localised synaptic damage and by afferent velocity noise.
+60 to 90 degree Fourier reorganisation reported by Ying et al. (2023) in a mouse
+model of early Alzheimer's disease can be reproduced by localised synaptic damage,
+by velocity-input noise, and by the two together.
 
-The analysis pipeline is validated against Ying et al.'s released data before
-being applied to model output: their published group ratios reproduce to five
-significant figures with identical blob detection on 171/171 cells.
+The code used for the MSc report lives in `rewrite/`. The top-level `model/`,
+`analysis/`, `hpc/` and `validation/` folders are the earlier pipeline it
+replaced and are kept for the validation history only.
 
 ---
 
-## Third-party code is **not** included
+## Provenance and attribution
 
-Two dependencies are required but deliberately absent from this repository:
-neither carries a licence upstream, so neither grants redistribution rights.
-Download them yourself and place them in the project root.
+This project builds on published methods and released code. Nothing below is
+claimed as original where it is not.
+
+| File | What it does | Where it comes from |
+|---|---|---|
+| `rewrite/Models/gc_baseline.m`, `gc_alpha.m`, `gc_noise.m`, `gc_sdnoise.m`, `gc_combined.m`, `gc_combined_sd.m` | Sheet dynamics, weight kernel, velocity input and the random-walk trajectory | Transcribed from the MATLAB code released with Burak and Fiete (2009), with their parameters. Walk speed is scaled as in Nagaraj and Narayanan (2024). |
+| same files, synaptic damage term | Scaling of recurrent weights by alpha inside a disc of radius R | Zhi and Cox (2021) |
+| same files, velocity-noise term | Gaussian white noise, and the signal-dependent variant sigma_t = sigma_v sqrt(v / mu_v) | Nagaraj and Narayanan (2024); the signal-dependent law is this project's extension, derived in the report annex |
+| `rewrite/Models/gc_run.m`, `gc_sweep.m`, `tracked_subset.m` | Condition wrapper, sweep driver, the 78 tracked neurons | This project |
+| `rewrite/Fourier/fourier_power.m` | Zero-padded FFT, normalisation, DC notch, thresholding | Reimplementation of Ying et al. (2023), validated line by line against their released `Grid component extraction.m` |
+| `rewrite/Fourier/fourier_components.m` | Component count, axis angles, 60 and 90 degree gap counts | Reimplementation of Ying et al. (2023), same conventions including the half-pixel centre |
+| `rewrite/Fourier/voronoi_baseline.m` | Field-shuffle noise floor | Method of Krupic et al. (2012); implementation transcribed from Ying et al. (2023). Every deviation from their code is marked `[CHANGED]` or `[ADDED]` in the source, the main one being the field-seeding kernel, which their spike-based seeding map cannot provide for model output. Calls `rotateAround` (Ying) and `VoronoiLimit` (Sievers). |
+| `rewrite/Fourier/ac_metrics.m` | Grid spacing and gridness from the autocorrelogram | Autocorrelogram and gridness are CMBHOME's own functions called directly (`CMBHOME.Utils.moserac`, `CMBHOME.Session.Gridness`). The spacing block is transcribed from CMBHOME `gridDistance.m`. |
+| `rewrite/Fourier/fourier_analysis.m`, `population_fourier_analysis.m` | Per-cell and population wrappers, f60 = n60 / (n60 + n90) | This project |
+| `analysis/VoronoiLimit.m` | Bounded Voronoi tessellation | Jakob Sievers, BSD-3-Clause, included with its notice in `analysis/VoronoiLimit_LICENSE.txt` |
+
+The pipeline reproduces the published group ratios of Ying et al. (2023) on their
+released 171 cells to the reported precision; the comparison and the residual
+differences are documented in the report annex.
+
+---
+
+## Third-party code that is required but not included
+
+Neither upstream repository carries a licence, so neither grants redistribution
+rights. Download them and place them in the project root.
 
 ### 1. CMBHOME (Hasselmo Lab, Boston University)
 
-Bill Chapman and Andrew Bogaard — <https://github.com/wchapman/CMBHOME>
+Bill Chapman and Andrew Bogaard, <https://github.com/wchapman/CMBHOME>
 
-Provides `moserac`, `Utils.extrema2`, `Utils.EllipseDirectFit`,
-`Utils.EllipseFromCoef` and `Session.Gridness`, which supply the autocorrelogram,
-grid spacing and gridness score.
+Provides `CMBHOME.Utils.moserac`, `CMBHOME.Utils.extrema2` and
+`CMBHOME.Session.Gridness`.
 
 ```
 MSc-Grid-Cell-CAN-Project/
@@ -30,38 +53,20 @@ MSc-Grid-Cell-CAN-Project/
     └── +CMBHOME/          <- the package folder; its PARENT goes on the path
 ```
 
-`startup_paths.m` adds `CMBHOME-master`, not `+CMBHOME` — MATLAB resolves
-packages from the parent directory. The bundled `chronux` subfolder is unused;
-do not `genpath` it or several hundred shadowing folders land on your path.
+The bundled `chronux` subfolder is unused; do not `genpath` it.
 
-**One local modification is required.** In `+CMBHOME/@Session/ValidCells.m`,
-comment out `disp('No cells in session object')`. This project uses `Session`
-only as a carrier for `Gridness`, called with a precomputed autocorrelogram, so
-the object never holds spike data and that line fires on every property access —
-78 lines per run, ~1.4M across a full sweep. Behaviour is otherwise unchanged.
+One local edit is needed. In `+CMBHOME/@Session/ValidCells.m`, comment out
+`disp('No cells in session object')`. `Session` is used here only as a carrier
+for `Gridness` with a precomputed autocorrelogram, so that line fires on every
+property access. Behaviour is otherwise unchanged.
 
 ### 2. Code for Ying et al. (2023)
 
-Johnson Ying — <https://github.com/johnson-ying/Code-for-Ying-et-al.-2023>
+Johnson Ying, <https://github.com/johnson-ying/Code-for-Ying-et-al.-2023>
 
-Provides `rotateAround` (used by the Voronoi shuffle) and the reference
-implementation the analysis pipeline was validated against.
-
-```
-MSc-Grid-Cell-CAN-Project/
-└── Code-for-Ying-et-al.-2023-main/
-    └── Figure_2/rotateAround/
-```
-
-The repository is ~5 GB because of `session_data/` and `grid data/`. Only the
-`.m` files are needed to run this project; the data is required only to re-run
-`validation/validate_against_ying.m`.
-
-### Included third-party file
-
-`analysis/VoronoiLimit.m` (Jakob Sievers, Aarhus University) **is** included —
-it is BSD-3-Clause, and `analysis/VoronoiLimit_LICENSE.txt` carries the notice as
-that licence requires.
+Provides `rotateAround` and `VoronoiLimit` (both under `Figure_2/`) and the
+reference implementation the analysis pipeline was validated against. Only the
+`.m` files are needed; the data trees are required only to re-run the validation.
 
 ---
 
@@ -69,76 +74,42 @@ that licence requires.
 
 ```matlab
 run('<project root>/startup_paths.m')
+addpath(fullfile('<project root>', 'rewrite', 'Models'), fullfile('<project root>', 'rewrite', 'Fourier'))
 ```
 
-Adds `model/`, `analysis/`, `hpc/`, `aggregate/`, `validation/`, `CMBHOME-master/`
-and Ying's `rotateAround/` to the path, then checks that every external
-dependency resolves — so a missing download fails in the first second rather than
-after a 400,000-step simulation.
-
-If MATLAB cannot find `startup_paths` by name, the project root is not on the
-path; `run()` with the full path works from anywhere. For a permanent fix, put a
-one-line `startup.m` calling it in your `userpath`.
-
-Developed on MATLAB R2025b; the cluster runs R2024b.
+Developed on MATLAB R2025b; the cluster runs R2024b. Requires the Image
+Processing Toolbox (`imgaussfilt`, `imregionalmax`, `regionprops`).
 
 ---
 
-## Layout
-
-| Folder | Contents |
-|---|---|
-| `model/` | CAN simulations. `gc_periodic_baseline` (healthy), `gc_periodic_alpha` (Zhi & Cox damage), `gc_periodic_noise` (Nagaraj & Narayanan velocity noise), and `gc_dynamics` as the entry point |
-| `analysis/` | `population_fourier_analysis` — the Fourier pipeline, Voronoi noise baseline, spacing and gridness. `plot_band_phase` builds the phase diagrams |
-| `hpc/` | PBS array-job drivers for the parameter sweeps |
-| `aggregate/` | Sweep aggregation |
-| `validation/` | Reproduction of Ying et al.'s published values, plus regression tests |
-
-`docs/`, `outputs/`, `figures/` and `results/` are untracked — see `.gitignore`.
-
----
-
-## Running
-
-Single condition:
+## Running (`rewrite/`)
 
 ```matlab
-gc_dynamics()                    % healthy baseline
-gc_dynamics('alpha', 0.7, 30)    % damage: severity 0.7, lesion radius 30 neurons
-gc_dynamics('noise', 0.5)        % afferent velocity noise, sigma_v = 0.5 m/s
+out = gc_run()                              % healthy baseline
+out = gc_run(0.85, 21)                      % synaptic damage, alpha = 0.85, R = 21 neurons
+out = gc_run([], [], 4.65 * 0.4998)         % Gaussian white velocity noise, sigma_v in m/s
+out = gc_run(0.85, 21, 4.65 * 0.4998, 0.43, 1, 'sd')   % damage plus signal-dependent noise, seed 1
 ```
 
-Each analyses the same 78 tracked cells the sweep uses, so a single run is
-directly comparable with a phase-diagram grid point.
-
-Sweep (Imperial CX3):
-
-```bash
-qsub -J 1-18768 hpc/band3.pbs
-matlab -nodisplay -batch "plot_band_phase('output_band3')"
-```
-
-Re-plot locally from a saved grid, without re-aggregating 18,767 files:
-
-```matlab
-plot_band_phase(fullfile('outputs','phase_band_all_pop.mat'))
-```
+`out.res` holds the per-cell Fourier results for the 78 tracked neurons and the
+population `s60`, `s90` and f60. Sweeps are run on Imperial CX3 from the drivers in
+`rewrite/hpc/` (to be added).
 
 ---
 
 ## References
 
+- Burak, Y. and Fiete, I. R. (2009). Accurate path integration in continuous
+  attractor network models of grid cells. PLoS Computational Biology 5, e1000291.
+- Krupic, J., Burgess, N. and O'Keefe, J. (2012). Neural representations of
+  location composed of spatially periodic bands. Science 337, 853 to 857.
+- Nagaraj, D. and Narayanan, R. (2024). Afferent noise in a continuous attractor
+  network model of grid cells. bioRxiv, doi 10.1101/2024.09.19.613994.
 - Ying, J. et al. (2023). Grid cell disruption in a mouse model of early
   Alzheimer's disease reflects reduced integration of self-motion cues.
-  *Current Biology* 33, 2425–2437.
-- Burak, Y. & Fiete, I. R. (2009). Accurate path integration in continuous
-  attractor network models of grid cells. *PLoS Computational Biology* 5, e1000291.
-- Zhi, Y. & Cox, C. (2021). Synaptic damage in a continuous attractor model of
+  Current Biology 33, 2425 to 2437.
+- Zhi, Y. and Cox, C. (2021). Synaptic damage in a continuous attractor model of
   grid cells.
-- Nagaraj, D. & Narayanan, R. (2024). Afferent noise in a continuous attractor
-  network model of grid cells.
-- Krupic, J. et al. Fourier decomposition of spatial firing patterns; source of
-  the Voronoi field-shuffle null.
-- Chapman, B. & Bogaard, A. CMBHOME: a custom MATLAB class for neural data.
-  Boston University. <https://github.com/wchapman/CMBHOME>
-- Sievers, J. VoronoiLimit. BSD-3-Clause.
+- Chapman, B. and Bogaard, A. CMBHOME. Boston University.
+  <https://github.com/wchapman/CMBHOME>
+- Sievers, J. VoronoiLimit. MATLAB File Exchange, BSD-3-Clause.
