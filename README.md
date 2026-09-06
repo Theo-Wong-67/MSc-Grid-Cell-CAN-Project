@@ -81,7 +81,8 @@ addpath(fullfile(root, 'Models'), fullfile(root, 'Fourier'), fullfile(root, 'fig
 ```
 
 Developed on MATLAB R2025b; the cluster runs R2024b. Requires the Image
-Processing Toolbox (`imgaussfilt`, `imregionalmax`, `regionprops`).
+Processing Toolbox and the Statistics and Machine Learning Toolbox; `VoronoiLimit`
+additionally requires the Mapping Toolbox.
 
 ---
 
