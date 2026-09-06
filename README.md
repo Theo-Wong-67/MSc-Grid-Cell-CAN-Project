@@ -5,7 +5,8 @@ A continuous attractor network (CAN) model of grid cells, used to ask whether th
 model of early Alzheimer's disease can be reproduced by localised synaptic damage,
 by velocity-input noise, and by the two together.
 
-`Models/` holds the network simulations and `Fourier/` the analysis pipeline.
+`Models/` holds the network simulations, `Fourier/` the analysis pipeline and
+`figures/` the scripts behind report Figures 2, 4, 7 and B1.
 The earlier pipeline this replaced was removed from the repository; it remains in
 the commit history before `08e6094`.
 
@@ -75,8 +76,8 @@ are needed; the data trees are required only to re-run the validation.
 ```matlab
 root = '<project root>';
 ying = fullfile(root, 'Code-for-Ying-et-al.-2023-main', 'Figure_2');
-addpath(fullfile(root, 'Models'), fullfile(root, 'Fourier'), fullfile(root, 'CMBHOME-master'), ...
-        fullfile(ying, 'rotateAround'), fullfile(ying, 'voronoiLimit'))
+addpath(fullfile(root, 'Models'), fullfile(root, 'Fourier'), fullfile(root, 'figures'), ...
+        fullfile(root, 'CMBHOME-master'), fullfile(ying, 'rotateAround'), fullfile(ying, 'voronoiLimit'))
 ```
 
 Developed on MATLAB R2025b; the cluster runs R2024b. Requires the Image
@@ -94,8 +95,20 @@ out = gc_run(0.85, 21, 4.65 * 0.4998, 0.43, 1, 'sd')   % damage plus signal-depe
 ```
 
 `out.res` holds the per-cell Fourier results for the 78 tracked neurons and the
-population `s60`, `s90` and f60. Sweeps were run on Imperial CX3; the PBS drivers are
-in `hpc/` (to be added).
+population `s60`, `s90` and f60. Sweeps were run on Imperial CX3.
+
+## Figures
+
+| Report | Script | Data it loads |
+|---|---|---|
+| Figure 2 | `figures/fig02_healthy_exemplar.m` | `log/detail/det_dmg_a150_r01_s1.mat`, one `gc_run` output |
+| Figure 4 | `figures/fig04_damage_plane.m` | `agg_merged_run1.mat`, the noise-free plane |
+| Figure 7 | `figures/fig07_noise_ladder.m` | `agg_noise.mat`, `agg_constband.mat`, `agg_noise_sd.mat`, `agg_sdband.mat` |
+| Figure B1 | `figures/figB1_wavelength_vs_ying.m` | `log/sdn_trial_const.mat` and Ying et al.'s `grid_data.mat` |
+
+`figures/viz.m` carries the shared colours, panel primitives and file output.
+The sweep outputs and aggregates are not in the repository and are available on
+request; each script writes to `output/` after `viz.nosave(false)`.
 
 ---
 
@@ -103,6 +116,8 @@ in `hpc/` (to be added).
 
 - Burak, Y. and Fiete, I. R. (2009). Accurate path integration in continuous
   attractor network models of grid cells. PLoS Computational Biology 5, e1000291.
+- Giocomo, L. M. et al. (2011). Grid cells use HCN1 channels for spatial
+  scaling. Cell 147, 1159 to 1170.
 - Krupic, J., Burgess, N. and O'Keefe, J. (2012). Neural representations of
   location composed of spatially periodic bands. Science 337, 853 to 857.
 - Nagaraj, D. and Narayanan, R. (2024). Afferent noise in a continuous attractor
