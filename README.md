@@ -27,7 +27,6 @@ claimed as original where it is not.
 | `Fourier/voronoi_baseline.m` | Field-shuffle noise floor | Method of Krupic et al. (2012); implementation transcribed from Ying et al. (2023). Every deviation from their code is marked `[CHANGED]` or `[ADDED]` in the source, the main one being the field-seeding kernel, which their spike-based seeding map cannot provide for model output. Calls `rotateAround` (Ying) and `VoronoiLimit` (Sievers). |
 | `Fourier/ac_metrics.m` | Grid spacing and gridness from the autocorrelogram | Autocorrelogram and gridness are CMBHOME's own functions called directly (`CMBHOME.Utils.moserac`, `CMBHOME.Session.Gridness`). The spacing block is transcribed from CMBHOME `gridDistance.m`. |
 | `Fourier/fourier_analysis.m`, `population_fourier_analysis.m` | Per-cell and population wrappers, f60 = n60 / (n60 + n90) | This project |
-| `Fourier/VoronoiLimit/VoronoiLimit.m` | Bounded Voronoi tessellation | Jakob Sievers, BSD-3-Clause, included with its notice in `Fourier/VoronoiLimit/VoronoiLimit_LICENSE.txt` |
 
 The pipeline reproduces the published group ratios of Ying et al. (2023) on their
 released 171 cells to the reported precision; the comparison and the residual
@@ -64,9 +63,10 @@ property access. Behaviour is otherwise unchanged.
 
 Johnson Ying, <https://github.com/johnson-ying/Code-for-Ying-et-al.-2023>
 
-Provides `rotateAround` (under `Figure_2/`) and the reference implementation the
-analysis pipeline was validated against. Only the
-`.m` files are needed; the data trees are required only to re-run the validation.
+Provides `rotateAround` and `VoronoiLimit` (both under `Figure_2/`; `VoronoiLimit`
+is Jakob Sievers' BSD-3-Clause function, redistributed there) and the reference
+implementation the analysis pipeline was validated against. Only the `.m` files
+are needed; the data trees are required only to re-run the validation.
 
 ---
 
@@ -74,8 +74,9 @@ analysis pipeline was validated against. Only the
 
 ```matlab
 root = '<project root>';
-addpath(fullfile(root, 'Models'), fullfile(root, 'Fourier'), fullfile(root, 'Fourier', 'VoronoiLimit'), ...
-        fullfile(root, 'CMBHOME-master'), fullfile(root, 'Code-for-Ying-et-al.-2023-main', 'Figure_2', 'rotateAround'))
+ying = fullfile(root, 'Code-for-Ying-et-al.-2023-main', 'Figure_2');
+addpath(fullfile(root, 'Models'), fullfile(root, 'Fourier'), fullfile(root, 'CMBHOME-master'), ...
+        fullfile(ying, 'rotateAround'), fullfile(ying, 'voronoiLimit'))
 ```
 
 Developed on MATLAB R2025b; the cluster runs R2024b. Requires the Image
@@ -113,4 +114,4 @@ in `hpc/` (to be added).
   grid cells.
 - Chapman, B. and Bogaard, A. CMBHOME. Boston University.
   <https://github.com/wchapman/CMBHOME>
-- Sievers, J. VoronoiLimit. MATLAB File Exchange, BSD-3-Clause.
+- Sievers, J. (2020). VoronoiLimit. MATLAB File Exchange, BSD-3-Clause.
