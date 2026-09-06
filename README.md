@@ -5,9 +5,9 @@ A continuous attractor network (CAN) model of grid cells, used to ask whether th
 model of early Alzheimer's disease can be reproduced by localised synaptic damage,
 by velocity-input noise, and by the two together.
 
-The code used for the MSc report lives in `rewrite/`. The top-level `model/`,
-`analysis/`, `hpc/` and `validation/` folders are the earlier pipeline it
-replaced and are kept for the validation history only.
+`Models/` holds the network simulations and `Fourier/` the analysis pipeline.
+The earlier pipeline this replaced was removed from the repository; it remains in
+the commit history before `08e6094`.
 
 ---
 
@@ -18,16 +18,16 @@ claimed as original where it is not.
 
 | File | What it does | Where it comes from |
 |---|---|---|
-| `rewrite/Models/gc_baseline.m`, `gc_alpha.m`, `gc_noise.m`, `gc_sdnoise.m`, `gc_combined.m`, `gc_combined_sd.m` | Sheet dynamics, weight kernel, velocity input and the random-walk trajectory | Transcribed from the MATLAB code released with Burak and Fiete (2009), with their parameters. Walk speed is scaled as in Nagaraj and Narayanan (2024). |
+| `Models/gc_baseline.m`, `gc_alpha.m`, `gc_noise.m`, `gc_sdnoise.m`, `gc_combined.m`, `gc_combined_sd.m` | Sheet dynamics, weight kernel, velocity input and the random-walk trajectory | Transcribed from the MATLAB code released with Burak and Fiete (2009), with their parameters. Walk speed is scaled as in Nagaraj and Narayanan (2024). |
 | same files, synaptic damage term | Scaling of recurrent weights by alpha inside a disc of radius R | Zhi and Cox (2021) |
 | same files, velocity-noise term | Gaussian white noise, and the signal-dependent variant sigma_t = sigma_v sqrt(v / mu_v) | Nagaraj and Narayanan (2024); the signal-dependent law is this project's extension, derived in the report annex |
-| `rewrite/Models/gc_run.m`, `gc_sweep.m`, `tracked_subset.m` | Condition wrapper, sweep driver, the 78 tracked neurons | This project |
-| `rewrite/Fourier/fourier_power.m` | Zero-padded FFT, normalisation, DC notch, thresholding | Reimplementation of Ying et al. (2023), validated line by line against their released `Grid component extraction.m` |
-| `rewrite/Fourier/fourier_components.m` | Component count, axis angles, 60 and 90 degree gap counts | Reimplementation of Ying et al. (2023), same conventions including the half-pixel centre |
-| `rewrite/Fourier/voronoi_baseline.m` | Field-shuffle noise floor | Method of Krupic et al. (2012); implementation transcribed from Ying et al. (2023). Every deviation from their code is marked `[CHANGED]` or `[ADDED]` in the source, the main one being the field-seeding kernel, which their spike-based seeding map cannot provide for model output. Calls `rotateAround` (Ying) and `VoronoiLimit` (Sievers). |
-| `rewrite/Fourier/ac_metrics.m` | Grid spacing and gridness from the autocorrelogram | Autocorrelogram and gridness are CMBHOME's own functions called directly (`CMBHOME.Utils.moserac`, `CMBHOME.Session.Gridness`). The spacing block is transcribed from CMBHOME `gridDistance.m`. |
-| `rewrite/Fourier/fourier_analysis.m`, `population_fourier_analysis.m` | Per-cell and population wrappers, f60 = n60 / (n60 + n90) | This project |
-| `analysis/VoronoiLimit.m` | Bounded Voronoi tessellation | Jakob Sievers, BSD-3-Clause, included with its notice in `analysis/VoronoiLimit_LICENSE.txt` |
+| `Models/gc_run.m`, `gc_sweep.m`, `tracked_subset.m` | Condition wrapper, sweep driver, the 78 tracked neurons | This project |
+| `Fourier/fourier_power.m` | Zero-padded FFT, normalisation, DC notch, thresholding | Reimplementation of Ying et al. (2023), validated line by line against their released `Grid component extraction.m` |
+| `Fourier/fourier_components.m` | Component count, axis angles, 60 and 90 degree gap counts | Reimplementation of Ying et al. (2023), same conventions including the half-pixel centre |
+| `Fourier/voronoi_baseline.m` | Field-shuffle noise floor | Method of Krupic et al. (2012); implementation transcribed from Ying et al. (2023). Every deviation from their code is marked `[CHANGED]` or `[ADDED]` in the source, the main one being the field-seeding kernel, which their spike-based seeding map cannot provide for model output. Calls `rotateAround` (Ying) and `VoronoiLimit` (Sievers). |
+| `Fourier/ac_metrics.m` | Grid spacing and gridness from the autocorrelogram | Autocorrelogram and gridness are CMBHOME's own functions called directly (`CMBHOME.Utils.moserac`, `CMBHOME.Session.Gridness`). The spacing block is transcribed from CMBHOME `gridDistance.m`. |
+| `Fourier/fourier_analysis.m`, `population_fourier_analysis.m` | Per-cell and population wrappers, f60 = n60 / (n60 + n90) | This project |
+| `Fourier/VoronoiLimit/VoronoiLimit.m` | Bounded Voronoi tessellation | Jakob Sievers, BSD-3-Clause, included with its notice in `Fourier/VoronoiLimit/VoronoiLimit_LICENSE.txt` |
 
 The pipeline reproduces the published group ratios of Ying et al. (2023) on their
 released 171 cells to the reported precision; the comparison and the residual
@@ -64,8 +64,8 @@ property access. Behaviour is otherwise unchanged.
 
 Johnson Ying, <https://github.com/johnson-ying/Code-for-Ying-et-al.-2023>
 
-Provides `rotateAround` and `VoronoiLimit` (both under `Figure_2/`) and the
-reference implementation the analysis pipeline was validated against. Only the
+Provides `rotateAround` (under `Figure_2/`) and the reference implementation the
+analysis pipeline was validated against. Only the
 `.m` files are needed; the data trees are required only to re-run the validation.
 
 ---
@@ -73,8 +73,9 @@ reference implementation the analysis pipeline was validated against. Only the
 ## Setup
 
 ```matlab
-run('<project root>/startup_paths.m')
-addpath(fullfile('<project root>', 'rewrite', 'Models'), fullfile('<project root>', 'rewrite', 'Fourier'))
+root = '<project root>';
+addpath(fullfile(root, 'Models'), fullfile(root, 'Fourier'), fullfile(root, 'Fourier', 'VoronoiLimit'), ...
+        fullfile(root, 'CMBHOME-master'), fullfile(root, 'Code-for-Ying-et-al.-2023-main', 'Figure_2', 'rotateAround'))
 ```
 
 Developed on MATLAB R2025b; the cluster runs R2024b. Requires the Image
@@ -82,7 +83,7 @@ Processing Toolbox (`imgaussfilt`, `imregionalmax`, `regionprops`).
 
 ---
 
-## Running (`rewrite/`)
+## Running
 
 ```matlab
 out = gc_run()                              % healthy baseline
@@ -92,8 +93,8 @@ out = gc_run(0.85, 21, 4.65 * 0.4998, 0.43, 1, 'sd')   % damage plus signal-depe
 ```
 
 `out.res` holds the per-cell Fourier results for the 78 tracked neurons and the
-population `s60`, `s90` and f60. Sweeps are run on Imperial CX3 from the drivers in
-`rewrite/hpc/` (to be added).
+population `s60`, `s90` and f60. Sweeps were run on Imperial CX3; the PBS drivers are
+in `hpc/` (to be added).
 
 ---
 

@@ -39,3 +39,10 @@ CMBHOME-master/
 Code-for-Ying-et-al.-2023-main/
 analysis/moserac.m
 analysis/rotateAround.m
+
+# ---- earlier pipeline, removed from the repository 2026-09-07, kept locally ----
+analysis/
+hpc/
+model/
+validation/
+startup_paths.m
